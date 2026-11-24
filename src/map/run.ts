@@ -26,9 +26,10 @@ export const files: Record<string, ArrayBuffer> = {}, levels: Record<string, Lev
 export const reading: Record<string, Promise<void>> = {};
 const sights: Record<string, Sight> = {};
 export function readMap(name: string) {
-  return reading[name] ||= fetch(`maps/${name}.bsp`).then(async response => {
+  return reading[name] ||= fetch(`maps/${name}.bsp.gz`).then(async response => {
     if (!response.ok) return;
-    files[name] = await response.arrayBuffer();
+    const bytes = await response.arrayBuffer();   // gzipped, unless the server already unpacked it
+    files[name] = new Uint8Array(bytes)[0] === 0x1f ? await new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream("gzip"))).arrayBuffer() : bytes;
     levels[name] = level(files[name]);
   }).catch(error => { delete reading[name]; throw error; });   // a failed read can be tried again
 }

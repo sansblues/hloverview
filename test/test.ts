@@ -9,6 +9,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import http from "node:http";
+import zlib from "node:zlib";
 import { spawn } from "node:child_process";
 import { demo, type Stretch } from "../src/read/demo.ts";
 import { level } from "../src/read/level.ts";
@@ -24,7 +25,7 @@ function check(name: string, ok: unknown, detail = "") {
   if (ok) passed++; else failed++;
   console.log(`${ok ? "ok  " : "FAIL"}  ${name}${ok || !detail ? "" : `\n      ${detail}`}`);
 }
-const read = (file: string) => { const b = fs.readFileSync(file); return b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength) as ArrayBuffer; };
+const read = (file: string) => { const b = file.endsWith(".gz") ? zlib.gunzipSync(fs.readFileSync(file)) : fs.readFileSync(file); return b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength) as ArrayBuffer; };
 const pb = [1, 2, 3, 4, 5].map(i => `${PB}/AM-IL_${i}.dem`);
 const shape = (d: Stretch[]) => d.map(s => [s.map, s.points.length / 5, +s.points[0].toFixed(3), +s.points[s.points.length - 5].toFixed(3)]);
 
@@ -105,11 +106,11 @@ function mapping() {
   const Expected = { c1a0: [648, 1722, 10, 0, 40, 77], c1a0d: [674, 1958, 30, 0, 59, 95], c1a0a: [526, 1348, 69, 0, 62, 92],
     c1a0b: [603, 1725, 97, 0, 49, 102], c1a0e: [476, 1073, 102, 0, 57, 95] };
   for (const [name, counts] of Object.entries(Expected)) {
-    const m = level(read(`${Maps}/${name}.bsp`)), got = [m.floors.length, m.walls.length, m.slopes.length, m.water.length, m.things.length, m.shapes.length];
+    const m = level(read(`${Maps}/${name}.bsp.gz`)), got = [m.floors.length, m.walls.length, m.slopes.length, m.water.length, m.things.length, m.shapes.length];
     check(`${name}: floors, walls, slopes, water, things, models`, got.join() === counts.join(), got.join());
     // Every invisible wall, checked by a reader of its own: the standing player is blocked there, and nothing drawn
     // (the world, or a brush entity the game draws where the map puts it) lies in the player's box, sampled every 2 units.
-    const hull = Hull(read(`${Maps}/${name}.bsp`)), xs = m.floors.flatMap(f => f.filter((_, i) => i % 2)), ys = m.floors.flatMap(f => f.filter((_, i) => i && i % 2 === 0));
+    const hull = Hull(read(`${Maps}/${name}.bsp.gz`)), xs = m.floors.flatMap(f => f.filter((_, i) => i % 2)), ys = m.floors.flatMap(f => f.filter((_, i) => i && i % 2 === 0));
     const bounds: [number, number, number, number] = [Math.min(...xs) - 32, Math.min(...ys) - 32, Math.max(...xs) + 32, Math.max(...ys) + 32], wrong: string[] = [];
     let cells = 0;
     for (const z of [m.start![2], ...new Set(m.floors.map(f => f[0] + 36))].slice(0, 12)) {
