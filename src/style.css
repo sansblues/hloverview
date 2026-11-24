@@ -1,0 +1,184 @@
+@font-face { font-family: Geist; src: url(fonts/geist.woff2) format("woff2"); font-weight: 400 600; font-display: swap }
+@font-face { font-family: "Geist Mono"; src: url(fonts/geist-mono.woff2) format("woff2"); font-weight: 400 500; font-display: swap }
+/* Dark and quiet: the map fills the screen; a bar above picks the run, a bar below plays it. One colour per role,
+   Geist Mono for data, Geist for words, three sizes: 11, 12, 14; corners nearly square. */
+:root {
+  --ground: #0c0f12;
+  --bar: #111519;
+  --raised: #182025;
+  --line: #333d44;
+  --ink: #e5e2db;
+  --muted: #98a1a7;
+  --faint: #5b646b;
+  --run: #f2a92c;
+  --ghost: #ee8fc0;
+  --person: #ebe6dc;
+  --enemy: #ec6f5f;
+  --item: #3fbf8f;
+  --object: #8d989f;
+  --mover: #a79df2;
+  --clip: #63d7e9;
+  --water: #4f8ed8;
+  --zone: #9aa3a9;
+  --sans: Geist, system-ui, sans-serif;
+  --mono: "Geist Mono", ui-monospace, monospace;
+  --control: 28px;
+  color-scheme: dark;
+}
+* { box-sizing: border-box }
+html, body, #root { height: 100% }
+body { margin: 0; background: var(--ground); color: var(--ink); font: 12px/1.45 var(--sans); overflow: hidden; -webkit-font-smoothing: antialiased }
+#root { display: flex; flex-direction: column }
+:focus-visible { outline: 2px solid var(--run); outline-offset: 2px }
+* { scrollbar-width: thin; scrollbar-color: var(--line) transparent }
+
+/* Controls: one height, one border, one corner. */
+button { font: 500 12px var(--sans); color: var(--ink); background: var(--raised); border: 1px solid var(--line); border-radius: 2px; height: var(--control); padding: 0 12px; cursor: pointer; white-space: nowrap; transition: border-color .15s, color .15s }
+button:hover { border-color: var(--muted) }
+button:disabled { opacity: .4; cursor: default; border-color: var(--line) }
+.icon { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; flex: none }
+.icon.solid { width: 12px; height: 12px; fill: currentColor; stroke: none }
+.square { width: var(--control); padding: 0; display: inline-grid; place-items: center; color: var(--muted) }
+.square:hover, .square[data-popup-open] { color: var(--ink); border-color: var(--muted) }
+.field { display: inline-flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 8px 0 12px; min-width: 0 }
+.field > span { overflow: hidden; text-overflow: ellipsis }
+.field .icon { width: 14px; height: 14px; color: var(--muted) }
+.field[data-popup-open] { border-color: var(--muted) }
+.run { max-width: 36vw }
+.rate { width: 64px; font-family: var(--mono); padding: 0 6px 0 10px }
+.logo { flex: none; display: block; width: 20px; height: 20px; margin-right: 4px; user-select: none; -webkit-user-drag: none }   /* public/icon.svg, Half-Life's λ, the tab's icon too */
+kbd { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 4px; font: 500 11px var(--mono); color: var(--ink); background: var(--raised); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 2px }
+kbd.glyph { font: 13px/1 system-ui, sans-serif }   /* arrows and shift: not in Geist Mono's latin set */
+.keys { display: inline-flex; gap: 4px }
+
+/* The ghost: an icon until a run is chosen, then a chip with its name and a way to stop. */
+.compare { position: relative; display: flex; align-items: center }
+.chip { display: inline-flex; align-items: center; gap: 8px; padding: 0 6px; color: var(--muted) }
+.chip:hover, .chip[data-popup-open] { color: var(--ink) }
+.compare.on .chip { color: var(--ink); border-color: var(--ghost); padding-right: 32px }
+.compare.on .chip .icon { color: var(--ghost) }
+.chip .name { max-width: 28vw; overflow: hidden; text-overflow: ellipsis }
+.clear { position: absolute; right: 0; top: 0; width: var(--control); padding: 0; display: grid; place-items: center; background: none; border: 0; color: var(--muted) }
+.clear:hover { color: var(--ink) }
+
+header, footer { display: flex; align-items: center; gap: 8px; padding-block: 8px; padding-left: max(12px, env(safe-area-inset-left, 0px)); padding-right: max(12px, env(safe-area-inset-right, 0px)); background: var(--bar) }
+header { border-bottom: 1px solid var(--line) }
+footer { border-top: 1px solid var(--line); gap: 12px; padding-bottom: max(8px, env(safe-area-inset-bottom, 0px)) }
+.grow { flex: 1 }
+
+/* Popups: the run lists, speeds, keys and hints. They fade in place, briefly. */
+.layer { z-index: 10; outline: 0 }
+.popup { background: var(--bar); border: 1px solid var(--line); border-radius: 2px; box-shadow: 0 8px 24px #0009; outline: 0; transform-origin: var(--transform-origin); transition: opacity .12s, scale .12s }
+.popup[data-starting-style], .popup[data-ending-style] { opacity: 0; scale: .98 }
+.picker { width: min(30rem, var(--available-width)); display: flex; flex-direction: column; max-height: min(26rem, var(--available-height)) }
+.search { display: flex; align-items: center; gap: 8px; padding: 0 12px; height: 36px; border-bottom: 1px solid var(--line); color: var(--muted) }
+.search input { flex: 1; min-width: 0; height: 100%; background: none; border: 0; outline: 0; color: var(--ink); font: 12px var(--sans) }
+.search input::placeholder { color: var(--faint) }
+.list { overflow: auto; overscroll-behavior: contain; padding: 4px; scroll-padding-block: 4px }
+.list:empty { display: none }
+.menu { padding: 4px; min-width: var(--anchor-width); font-family: var(--mono) }
+.option { display: grid; grid-template-columns: 1fr 14px; align-items: center; gap: 12px; padding: 6px 8px; border-radius: 2px; cursor: default; user-select: none; white-space: nowrap }
+.option > span { overflow: hidden; text-overflow: ellipsis }
+.run-option { grid-template-columns: 1fr auto 14px }
+.run-option em { font-style: normal; color: var(--run); margin-left: 8px }
+.run-option time { font: 11px var(--mono); color: var(--muted); font-variant-numeric: tabular-nums }
+.option[data-highlighted] { background: var(--raised) }
+.tick { display: grid; color: var(--run) }
+.tick .icon { width: 14px; height: 14px }
+.empty:not(:empty) { padding: 12px; color: var(--muted) }
+.hint { display: flex; align-items: center; gap: 8px; padding: 4px 8px; font-size: 11px; color: var(--ink); background: var(--raised); border: 1px solid var(--line); border-radius: 2px; box-shadow: 0 4px 12px #0006; max-width: 280px; transition: opacity .12s }
+.hint[data-starting-style], .hint[data-ending-style] { opacity: 0 }
+.hint kbd { height: 16px; min-width: 16px; font-size: 10px }
+.shortcuts dl { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; margin: 0; padding: 12px; color: var(--muted) }
+.shortcuts dt { display: flex; justify-content: flex-end; align-items: center }
+.shortcuts dd { margin: 0; align-self: center; color: var(--ink) }
+
+.stage { position: relative; flex: 1; min-height: 0 }
+canvas { display: block; width: 100%; height: 100%; touch-action: none; cursor: grab }
+canvas.dragging { cursor: grabbing }
+
+/* The legend: what each mark means, only what this map has. */
+.legend { position: absolute; top: 12px; right: max(12px, env(safe-area-inset-right, 0px)); width: 216px; max-height: calc(100% - 24px); overflow: auto; background: var(--bar); border: 1px solid var(--line); border-radius: 2px; padding: 0 12px }
+.legend:not([data-open]) { width: auto; padding: 0 }
+.legend .toggle { width: 100%; height: 32px; display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 0; background: none; border: 0; color: var(--muted) }
+.legend:not([data-open]) .toggle { height: var(--control); padding: 0 8px 0 12px }
+.legend .toggle:hover { color: var(--ink) }
+.legend .toggle .icon { width: 14px; height: 14px; transition: rotate .15s }
+.legend:not([data-open]) .toggle .icon { rotate: 180deg }
+.legend .panel { padding-bottom: 12px }
+.legend section { display: grid; gap: 6px; padding-top: 12px; border-top: 1px solid var(--line) }
+.legend section + section { margin-top: 12px }
+.legend h2 { margin: 0 0 2px; font: 500 11px var(--sans); color: var(--muted) }
+.legend span { display: grid; grid-template-columns: 16px 1fr; align-items: start; gap: 8px; color: var(--ink); line-height: 16px }
+.legend code { font: 11px/16px var(--mono); overflow-wrap: anywhere; white-space: pre-line }
+.legend i { justify-self: center; align-self: center; width: 12px; height: 12px; position: relative }
+.legend span:has(code) i { align-self: start; margin-top: 2px }
+.legend .box { border: 1.25px solid var(--c); background: color-mix(in srgb, var(--c) 22%, transparent) }
+.legend .line { border: 1.25px solid var(--c) }
+.legend .faint { opacity: .35 }
+.legend .away { border: 1.25px dashed var(--muted) }
+.legend .fill { background: var(--c); border-radius: 1px }
+.legend .water { background: color-mix(in srgb, var(--water) 35%, transparent) }
+.legend .rungs { border: 1.25px solid var(--zone); background: repeating-linear-gradient(0deg, var(--zone) 0 1px, transparent 1px 3px) }
+.legend .player { width: 16px }
+.legend .player svg { display: block; width: 16px; height: 12px }
+.legend .player rect { fill: var(--run) }
+.legend .player .view { fill: #f2a92c1a; stroke: #f2a92c99; stroke-width: 1 }
+.legend .player.ghost rect { fill: none; stroke: var(--ghost); stroke-width: 1.5 }
+.legend .player.ghost .view { fill: #ee8fc012; stroke: #ee8fc080 }
+.legend .ramp { width: 16px; height: 4px; border-radius: 1px }
+.legend [data-show=route] { grid-template-columns: 16px 1fr auto }
+.legend [data-show=route] small { font: 11px var(--mono); color: var(--muted) }
+.legend .dead { border: 1.25px solid var(--zone); opacity: .7; background: linear-gradient(45deg, transparent 44%, var(--zone) 44% 56%, transparent 56%), linear-gradient(-45deg, transparent 44%, var(--zone) 44% 56%, transparent 56%) }
+.legend .slope { background: repeating-linear-gradient(-45deg, #e5e2db55 0 1px, transparent 1px 4px) }
+.legend .push { border: 1.25px solid var(--zone) }
+.legend .push::after { content: ""; position: absolute; left: 2px; right: 2px; top: 4.5px; height: 1.25px; background: var(--zone) }
+
+/* Over the map: fit, keys and where the pointer is; the card; states. */
+.where { position: absolute; left: max(12px, env(safe-area-inset-left, 0px)); bottom: 12px; display: flex; align-items: center; gap: 8px; font: 11px var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; pointer-events: none }
+.where button { pointer-events: auto; background: var(--bar) }
+.tip { position: absolute; z-index: 2; min-width: 180px; max-width: 300px; background: var(--raised); border: 1px solid var(--line); border-radius: 2px; padding: 10px 12px; pointer-events: none; box-shadow: 0 4px 12px #0006 }
+.tip strong { display: block; font: 500 12px var(--mono) }
+.tip small { display: block; font: 11px var(--mono); color: var(--muted) }
+.tip dl { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; margin: 8px 0 0; font: 12px var(--mono); font-variant-numeric: tabular-nums }
+.tip dt { color: var(--muted) }
+.tip dd { margin: 0; overflow-wrap: anywhere; white-space: pre-line }
+.tip p { margin: 8px 0 0; font-size: 11px; color: var(--muted) }
+.notice { position: absolute; inset: 0; display: grid; place-items: center; padding: 24px; text-align: center; color: var(--muted); pointer-events: none }
+.notice > div { max-width: 46ch; display: grid; gap: 4px; pointer-events: auto; background: var(--bar); border: 1px solid var(--line); border-radius: 2px; padding: 16px 20px }
+.notice strong { color: var(--ink); font-weight: 600 }
+.notice code { font: 12px var(--mono); color: var(--ink) }
+.notice small { margin-top: 8px; font-size: 11px }
+.status { position: absolute; left: 50%; top: 12px; translate: -50% 0; font: 11px var(--mono); color: var(--muted); background: var(--bar); border: 1px solid var(--line); border-radius: 2px; padding: 4px 12px; pointer-events: none }
+.drop { position: absolute; inset: 12px; border: 1.5px dashed var(--run); border-radius: 2px; display: grid; place-items: center; font: 500 14px var(--sans); color: var(--run); background: #0c0f12d9; pointer-events: none }
+
+/* The timeline: a band per map; the part played is tinted, the head marks now. */
+.play { color: var(--ink) }
+.timeline { position: relative; flex: 1; min-width: 120px; height: 32px; display: flex; gap: 2px; cursor: pointer; touch-action: none; border-radius: 2px }
+.timeline .band { position: relative; height: 100%; min-width: 2px; background: var(--raised); border-radius: 1px; font: 11px var(--mono); color: var(--muted); display: flex; align-items: center }
+.timeline .band > span { position: relative; padding-left: 8px; overflow: hidden; white-space: nowrap }
+.timeline .band.on { color: var(--ink); box-shadow: inset 0 0 0 1px var(--muted) }
+.timeline .past { position: absolute; inset: 0 auto 0 0; background: #f2a92c26; border-radius: 1px; pointer-events: none }
+.timeline .head { position: absolute; z-index: 1; top: -4px; bottom: -4px; width: 2px; margin-left: -1px; background: var(--run); border-radius: 1px; pointer-events: none }
+.timeline .head::before { content: ""; position: absolute; top: -4px; left: -3px; width: 8px; height: 8px; border-radius: 1px; background: var(--run) }
+.timeline .hover { position: absolute; z-index: 2; top: 0; bottom: 0; width: 1px; background: var(--muted); pointer-events: none }
+.timeline .hover span { position: absolute; bottom: calc(100% + 8px); translate: -50% 0; font: 11px var(--mono); color: var(--ink); background: var(--raised); border: 1px solid var(--line); border-radius: 2px; padding: 2px 8px; white-space: nowrap }
+.readout { flex: none; display: flex; justify-content: flex-end; align-items: baseline; gap: 12px; font: 12px var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--muted) }
+.readout b { font-weight: 500; color: var(--ink) }
+.readout .big { font-size: 14px }
+.readout .speed { display: inline-block; min-width: 4ch; text-align: right }
+.readout .split { min-width: 13ch }
+.readout .behind { color: var(--enemy) }
+.readout .ahead { color: var(--item) }
+
+@media (max-width: 760px) {
+  .chip .name { display: none }
+  .run { flex: 1 1 0; max-width: none }
+  .grow { display: none }
+  footer { flex-wrap: wrap }
+  .timeline { order: 3; flex-basis: 100% }
+  .readout { flex: 1; justify-content: flex-start; flex-wrap: wrap; row-gap: 2px }
+}
+@media (pointer: coarse) { :root { --control: 40px } .timeline { height: 40px } }
+@media (hover: none) { button:hover { border-color: var(--line) } }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important } }
